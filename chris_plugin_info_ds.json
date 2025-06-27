@@ -1,0 +1,49 @@
+{
+  "type": "ds",
+  "name": "pl-download-bulk",
+  "dock_image": "ghcr.io/fnndsc/pl-download:1.0.0",
+  "public_repo": "https://github.com/FNNDSC/pl-download",
+  "version": "1.0.0",
+  "title": "Downloader",
+  "authors": "FNNDSC <dev@babyMRI.org>",
+  "category": "Utility",
+  "description": "Read URLs from input files and download them in bulk.",
+  "documentation": "https://github.com/FNNDSC/pl-download#readme",
+  "license": "MIT",
+  "icon": "",
+  "parameters": [
+    {
+      "name": "retries",
+      "type": "int",
+      "optional": true,
+      "flag": "--retries",
+      "short_flag": "-r",
+      "action": "store",
+      "help": "Number of retries per download",
+      "default": 3,
+      "ui_exposed": true
+    },
+    {
+      "name": "concurrency",
+      "type": "int",
+      "optional": true,
+      "flag": "--concurrency",
+      "short_flag": "-J",
+      "action": "store",
+      "help": "Maximum number of concurrent downloads",
+      "default": 32,
+      "ui_exposed": true
+    }
+  ],
+  "selfpath": "--",
+  "selfexec": "dummy_selfexec",
+  "execshell": "/bin/download",
+  "min_number_of_workers": 1,
+  "max_number_of_workers": 1,
+  "min_memory_limit": "200Mi",
+  "max_memory_limit": "8Gi",
+  "min_cpu_limit": "200m",
+  "max_cpu_limit": "4000m",
+  "min_gpu_limit": 0,
+  "max_gpu_limit": 0
+}

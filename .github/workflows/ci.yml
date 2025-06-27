@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - "v?[0-9]+.[0-9]+.[0-9]+*"
+    paths:
+      - '.github/**'
+      - '**.rs'
+      - 'Cargo.*'
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-rust:
+    name: Build Rust binary
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target:
+        - aarch64-unknown-linux-musl
+        - x86_64-unknown-linux-musl
+    steps:
+    - uses: actions/checkout@v4
+    - name: Cache rust build
+      uses: Swatinem/rust-cache@v2
+    - name: Build
+      uses: houseabsolute/actions-rust-cross@f7da4010930154943c99d13df0151dece91a924f
+      with:
+        target: ${{ matrix.target }}
+        command: build
+        args: --release --locked --bin download
+    - name: Move binary
+      run: |
+        mkdir dist
+        mv target/${{ matrix.target }}/release/download dist/download
+    - name: Calculate checksum
+      run: |
+        cd dist
+        sha256 download | tee download.sha256sum
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: 'build__${{ matrix.target }}'
+        path: dist
+        if-no-files-found: 'error'
+  build-docker:
+    name: Build container image
+    runs-on: ubuntu-24.04
+    needs: [ build-rust ]
+    steps:
+    - name: Download x86_64 binary
+      uses: actions/download-artifact@v4
+    - name: Print out all files
+      run: find -type f
+    - name: Print expected checksums
+      run: find -type f -name '*.sha256sum' -exec sh -c 'echo {} && cat {}' \;
+    - name: Calculate actual checksums
+      run: find -type f -name 'download' -exec sha256sum '{}' \;
+    - name: Move binaries and mark executable
+      run: |
+        mkdir -vp dist/linux/amd64 dist/linux/arm64
+        mv -v build__x86_64-unknown-linux-musl/download dist/linux/amd64/download
+        mv -v build__aarch64-unknown-linux-musl/download dist/linux/arm64/download
+        chmod -v 555 dist/linux/{amd64,arm64}/download
+    - name: Create Dockerfile
+      run: |
+        cat > Dockerfile << EOF
+        # syntax=docker/dockerfile:1
+        FROM scratch
+        ARG TARGETPLATFORM
+        COPY ./dist/\$TARGETPLATFORM/download /bin/download
+        CMD ["/bin/download"]
+        EOF
+    - uses: docker/metadata-action@v5
+      id: meta
+      with:
+        images: |
+          docker.io/fnndsc/download
+          ghcr.io/fnndsc/download
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        push: true
+        file: ./Dockerfile
+        platforms: linux/amd64,linux/arm64
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  publish-chris-plugins:
+    name: Publish ChRIS plugins
+    runs-on: ubuntu-24.04
+    needs: [ build-docker ]
+    if: github.ref_type == 'tag'
+    steps:
+    - name: Git checkout
+      uses: actions/checkout@v4
+    - name: Upload ChRIS plugin (fs)
+      uses: FNNDSC/upload-chris-plugin@v1
+      with:
+        username: ${{ secrets.CHRISPROJECT_USERNAME }}
+        password: ${{ secrets.CHRISPROJECT_PASSWORD }}
+        chris_url: https://cube.chrisproject.org/api/v1/
+        compute_names: NERC
+        description_file: ./chris_plugin_info_fs.json
+    - name: Upload ChRIS plugin (ds)
+      uses: FNNDSC/upload-chris-plugin@v1
+      with:
+        username: ${{ secrets.CHRISPROJECT_USERNAME }}
+        password: ${{ secrets.CHRISPROJECT_PASSWORD }}
+        chris_url: https://cube.chrisproject.org/api/v1/
+        compute_names: NERC
+        description_file: ./chris_plugin_info_ds.json

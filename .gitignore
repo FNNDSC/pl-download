@@ -1,0 +1,6 @@
+/.idea
+/target
+
+# local testing data
+/incoming
+/outgoing
