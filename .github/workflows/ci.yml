@@ -80,8 +80,8 @@ jobs:
       id: meta
       with:
         images: |
-          docker.io/fnndsc/download
-          ghcr.io/fnndsc/download
+          docker.io/fnndsc/pl-download
+          ghcr.io/fnndsc/pl-download
         tags: |
           type=ref,event=branch
           type=ref,event=pr
